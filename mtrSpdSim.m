@@ -13,6 +13,8 @@ sampledMtrPos = 0;
 wrapOffset = 0;
 diffCounts = 0;
 
+diff_cnts = 0;
+
 meas_spd =0;
 countIdx = 1;
 
@@ -32,7 +34,7 @@ alpha = dt_cntrl/(tao + dt_cntrl);
 
 
 
-mtrSpeed_rpm = 500*sin(2*pi*1*t)+1000;
+mtrSpeed_rpm = 5*sin(2*pi*1*t)+500;
 mtrSpeed_rps = mtrSpeed_rpm/60;
 mtrSpeed_dps = mtrSpeed_rps *360;
 mtrSpeed_cps = mtrSpeed_rps*1023;
@@ -87,12 +89,12 @@ for ii = 1:length(t)
     
     
     
-    if (wrapEn)
+    if (wrapEn & (countIdx >2) )
       curSector = floor(sampledMtrPos / sizeSector);
       if ( (mtrDir*(curSector - prevSector) > 1)  || (mtrDir*(curSector - prevSector) < 0))
 ##          disp('wrapped')
 ##          disp(diffCounts)
-         sampledMtrPos = mod(potMtrCntsPrev + mtrDir*diffCounts,1023);
+         sampledMtrPos = mod(potMtrCntsPrev + mtrDir*mean(diff_cnts(end-10:end)),1023); % diffCounts,1023);
       end
 
     end
@@ -149,6 +151,8 @@ for ii = 1:length(t)
   
   
 end
+
+ meas_spd(2) = mtrSpeed_rpm(2);
 
 figure(1),clf
 hold all

@@ -4,7 +4,7 @@ clear
 adcCounts_max = 1023;
 updateRate = 1/1000;
 
-mtrSpd_RPM = [1000:1:10000];
+mtrSpd_RPM = [1000:1:5000];
 mtrSpd_rps = mtrSpd_RPM/60;
 
 updateCounts = (1/updateRate)./mtrSpd_rps;

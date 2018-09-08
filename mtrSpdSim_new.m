@@ -1,6 +1,8 @@
 clear
 clc
 
+rng(randi(100000))
+
 potMtrCntsPrev = 0;
 potMtrCnts = 0;
 mtrPosCnts = 0;
@@ -38,7 +40,7 @@ tao = 0.0000000001;
 alpha = dt_cntrl/(tao + dt_cntrl);
 
 
-mtrSpeed_rpm = (200*sin(2*pi*10*t)).* min(exp(t*5)-1,1) ;
+mtrSpeed_rpm = (100*sin(2*pi*50*t)+000).* min(exp(t*5)-1,1) ;
 mtrSpeed_rps = mtrSpeed_rpm/60;
 mtrSpeed_dps = mtrSpeed_rps *360;
 mtrSpeed_cps = mtrSpeed_rps*1023;
@@ -47,7 +49,7 @@ startOffset_deg = 10;
 
 WRAP_THRESHOLD = 20;
 
-numSectors = 12;
+numSectors = 15;%ceil(360/WRAP_THRESHOLD);
 sizeSector = ceil(1023/numSectors);
 prevSector = ceil(realMrPos / sizeSector);
 curSector = prevSector;
@@ -79,6 +81,9 @@ diffCountsPrev =  mod(realMrPos,360);
 %%      
 wrapCnt = 0;
 trackingAck = 0;
+
+AQRTRACK = 1;
+TRACKING = 0;
 
 for ii = 1:length(t)
   realMrPos = realMrPos + mtrSpeed_dps(ii)*dt_sim;
@@ -128,7 +133,7 @@ for ii = 1:length(t)
     end
     
     potMtrCnts = sampledMtrPos  
-   
+%    sampledMtrPos = potMtrCnts;
     %% end zone
    
       
@@ -141,113 +146,105 @@ for ii = 1:length(t)
       diffCountsPrev = sampledMtrPos;
     end
     
-    
+%     wrapCheck(curSector, prevSector)
     
     
     if (wrapEn )
     
-     % Find out where we area
+       % Find out where we area
        curSector = ceil(sampledMtrPos / sizeSector);
        
-       if((sampledMtrPos == 0) || (sampledMtrPos == 1023))
+       %% Mode criteria
+       predictMode_crit_1 = (sampledMtrPos == 0);
+       predictMode_crit_2 = (sampledMtrPos == 1023);
+       predictMode_crit_3 = (abs(curSector - prevSector) > 1) && (wrapCheck(curSector, prevSector,numSectors) == 3);
+       [temp_diff, temp_cnt] = wrapper(wrapCheck(curSector, prevSector,numSectors), sampledMtrPos, potMtrCntsPrev, wrapCnt);
+       predictMode_crit_4 =  abs(temp_diff) > WRAP_THRESHOLD;
+       
+       predictMode_crit_5 = (diffCounts - temp_diff) > WRAP_THRESHOLD;
+       predictMode_crit = predictMode_crit_1 || predictMode_crit_2 || predictMode_crit_3 || predictMode_crit_4 || predictMode_crit_5;
+              
+       TRACKING_crit = (trackingAck) > 2
+       
+       
+       if( predictMode_crit )
           predictMode = 1;
           trackingAck = 0;
           trackingAckPrev = 0; 
-       else
-           if (abs(sampledMtrPos - trackingAckPrev) < WRAP_THRESHOLD )
-               trackingAckPrev = sampledMtrPos;
-               trackingAck = trackingAck +1;
+          TRACKING = 0;
+          AQRTRACK = 1;
+       end
+       
+       if (TRACKING_crit)
+            predictMode = 0;
+            TRACKING = 1;
+            AQRTRACK = 0;
+            trackingAck = 0;
+            potMtrCntsPrev = trackingAckPrev
+       end
+       
+  
+       
+       if (~predictMode && AQRTRACK)
+           disp('broke')
+       end
+       
+       %% modes of operation
+       
+        if (TRACKING)
+            
+            [diffCounts,wrapCnt] = wrapper(wrapCheck(curSector, prevSector,numSectors), sampledMtrPos, potMtrCntsPrev, wrapCnt)
+        
+            if predictModePrev
+                diffCounts = diffCountsPrev;
+             end
+%             
+%             if ((trackingAck == 3)
+%                 ceil(lostTrackSample / sizeSector)
+%             
+            if (abs(diffCounts) > WRAP_THRESHOLD)
+                predictMode = 1;
+            end
+                
+        end
+       
+        
+             
+       if (predictMode)
+             sampledMtrPos = mod(potMtrCntsPrev + diffCountsPrev, 1023);
+             curSector = ceil(sampledMtrPos / sizeSector);
+             [diffCounts,wrapCnt] = wrapper(wrapCheck(curSector, prevSector,numSectors), sampledMtrPos, potMtrCntsPrev, wrapCnt)
+       end
+       
+       
+       if (AQRTRACK)
+            if (abs(sampledMtrPos - trackingAckPrev) < WRAP_THRESHOLD )
+                trackingAck = trackingAck +1;
            else
                trackingAck = 0;
-           end
-           trackingAckPrev = sampledMtrPos;
-       end
-       
-       if (predictModePrev)
-          predictZone = 0; %deadzoneSizeCnt;
-       else
-          predictZone = 0;
-       end
-       
-
-        
-         
-        % Wrap check down
-      if( ((curSector == 1) || (curSector == 0)) && ((prevSector == 13) || (prevSector == 12 )))
-        wrapOffset = 1023 -  potMtrCntsPrev;
-        diffCounts = (sampledMtrPos + wrapOffset);
-        wrapCnt = wrapCnt +1;
-      % Wrap check up  
-      elseif( ((curSector == 12) || (curSector == 13 )) && ((prevSector == 0) ||  (prevSector == 1)))
-        wrapOffset = 1023 -  sampledMtrPos;
-        diffCounts = -(wrapOffset + potMtrCntsPrev);
-        wrapCnt = wrapCnt - 1;
-      else
-          
-        if (abs(curSector - prevSector) > 1)
-          predictMode = 1;
-%         elseif(((curSector - prevSector) ~= sign(mtrDir)) && ((curSector - prevSector) ~= 0))
-%          predictMode = 1;
-%         elseif (( abs(sampledMtrPos - potMtrCntsPrev) > WRAP_THRESHOLD) && (diffCountsPrev ~= 0)) % add accel limit
-%          predictMode = 1;
-        end
-           
-        
-
-            if(predictMode)
-                 if ((trackingAck) >= 2)
-                    predictMode = 0;
-                 else
-
-                  sampledMtrPos = mod(potMtrCntsPrev + diffCountsPrev, 1023);
-                  curSector = ceil(sampledMtrPos / sizeSector);
-                  predictZone = 0;
-
-                        % Wrap check down
-                      if( ((curSector == 1) || (curSector == 0)) && ((prevSector == 13) || (prevSector == 12 )))
-                        wrapOffset = 1023 -  potMtrCntsPrev;
-                        diffCounts = (sampledMtrPos + wrapOffset);
-                        wrapCnt = wrapCnt +1;
-                      % Wrap check up  
-                      elseif( ((curSector == 12) || (curSector == 13 )) && ((prevSector == 0) ||  (prevSector == 1)))
-                        wrapOffset = 1023 -  sampledMtrPos;
-                        diffCounts = -(wrapOffset + potMtrCntsPrev);
-                        wrapCnt = wrapCnt - 1;
-                      end
-                 end
+               lostTrackSample = sampledMtrPos;
             end
+            trackingAckPrev = sampledMtrPos;
+       end
+           
+           
+       
 
-                tempDiff = sampledMtrPos - potMtrCntsPrev;
-                diffCounts = tempDiff;
+       
+ 
+        
+        %% limits
+        if(diffCounts > 0)
+            diffCounts = min(diffCounts, WRAP_THRESHOLD);
+        elseif (diffCounts < 0)
+            diffCounts = max(diffCounts, -WRAP_THRESHOLD);
+        end
 
-                diffCounts = min(diffCounts, WRAP_THRESHOLD);
-%                 diffCounts = min(diffCounts, WRAP_THRESHOLD);
 
-                mtrPosCntsUnwrapped = sampledMtrPos + wrapCnt*1023;
-
-            
         mtrPosCntsUnwrapped = sampledMtrPos + wrapCnt*1023;
 
 
-      end
-    
-         
-         
-%         else
-%         
-%       
-%         tempDiff = sampledMtrPos - potMtrCntsPrev;
-%         diffCounts = tempDiff;
-%         
-%         diffCounts = min(diffCounts, WRAP_THRESHOLD);
-%         
-%         mtrPosCntsUnwrapped = sampledMtrPos + wrapCnt*1023;
-%         
-%        
-%       
-%         
-%      
-%         calcMtrPos = (sampledMtrPos+wrapCnt*1023);
+        
 %       
 %        tempDiff = (sampledMtrPos+wrapCnt*1023) - (potMtrCntsPrev+wrapCnt*1023);
 %         
@@ -288,13 +285,13 @@ for ii = 1:length(t)
 
       
     %    if ( (meas_, spd(countIdx) < 0)  ||   (meas_spd(countIdx) > 4000))
-   if ( (diffCounts) < -30 )
+   if ( (diffCounts) < 0 )
         disp('break')
    end
 
-%    if (   trackingAck == 0)
-%          disp('break')
-%     end
+   if (   abs(realMrPos - mtrPosCntsUnwrapped*360/1023) > 100)
+         disp('break')
+    end
       
 
     meas_predSect(countIdx)= predSector;
@@ -324,13 +321,15 @@ for ii = 1:length(t)
 %     meas_predPosCnts(countIdx) = predPosCnts;    
 %     meas_estm(countIdx) = est_out*(60/1023)/(dt_cntrl);     
     
+    
+
     predictModePrev = predictMode;
     diffCountsPrev = diffCounts;
     potMtrCntsPrev = sampledMtrPos;
     prevSector = curSector;
     countIdx = countIdx+1;
     
-    predictMode = 0;
+%     predictMode = 0;
     
     initRun = 1;
   end
@@ -350,11 +349,11 @@ plot(meas_time, meas_spd,'-x')
 
 % plot(plot(meas_time, meas_estm)
 plot(meas_time,meas_pred*300,'o')
-plot(meas_time,meas_potMtrCnts*10)
+% plot(meas_time,meas_potMtrCnts*10)
 plot(meas_time,meas_trackingAck*100)
 plot(meas_time,meas_deadzoneFlag*1000, 'kx')
 
-legend({'Actual'; 'wrap'; 'predict mode'; 'potCnts'; 'tracking'})
+legend({'Actual'; 'wrap'; 'predict mode'; 'tracking'; 'deadzone'})
 
 xlabel('Time')
 ylabel('RPM')
@@ -366,9 +365,49 @@ plot(meas_time,meas_mtrPosCntsUnwrapped*360/1023)
 plot(meas_time,meas_mtrPos,'x')
 % plot(meas_time,meas_pred*3000,'x')
 legend({'unwrap cnts';'real'})
+plot(meas_time,meas_wrapCnt*100)
+plot(meas_time,meas_sct*100)
+
 figure(3),clf
 plot(meas_time,diff_cnts)
 %plot(meas_time, meas_estm,'-o')
 % plot(t, realMtrPos_cnts*360/1023)
 % plot(t, realMrPos_deg)
+
+
+function [wrapped] = wrapCheck(curSector, prevSector,numSectors)
+
+    if( ((curSector == 1) || (curSector == 0)) && ((prevSector == (numSectors-1)) || (prevSector == (numSectors) )))
+        wrapped = 1; % positive
+    elseif( ((curSector == (numSectors-1)) || (curSector == (numSectors) )) && ((prevSector == 0) ||  (prevSector == 1)))
+        wrapped = 2; % neg
+    else
+        if ((prevSector == 1) || (prevSector == numSectors) )
+            wrapped = 3; % edge sectors
+            
+        else
+            wrapped = 0
+        end
+            
+    end
+
+end
+
+function [diffCounts, wrapCnt] = wrapper(wrappedVal, sampledMtrPos, potMtrCntsPrev, wrapCnt)
+
+
+    if (wrappedVal == 1)
+        wrapOffset = 1023 -  potMtrCntsPrev;
+        diffCounts = (sampledMtrPos + wrapOffset);
+        wrapCnt = wrapCnt +1;
+        % Wrap check up  
+    elseif (wrappedVal == 2)
+        wrapOffset = 1023 -  sampledMtrPos;
+        diffCounts = -(wrapOffset + potMtrCntsPrev);
+        wrapCnt = wrapCnt - 1;
+    else
+        tempDiff = sampledMtrPos - potMtrCntsPrev;
+        diffCounts = tempDiff;
+    end
+end
 

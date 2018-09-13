@@ -2,9 +2,9 @@ clc
 clear
 
 adcCounts_max = 1023;
-updateRate = 1/1000;
+updateRate = 1/3000;
 
-mtrSpd_RPM = [1000:1:5000];
+mtrSpd_RPM = 1000 ;%[0:1:500];
 mtrSpd_rps = mtrSpd_RPM/60;
 
 updateCounts = (1/updateRate)./mtrSpd_rps;

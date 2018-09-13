@@ -40,7 +40,7 @@ tao = 0.0000000001;
 alpha = dt_cntrl/(tao + dt_cntrl);
 
 
-mtrSpeed_rpm = (100*sin(2*pi*50*t)+000).* min(exp(t*5)-1,1) ;
+mtrSpeed_rpm = (152*sin(2*pi*1*t)).* min(exp(t*5)-1,1) ;
 mtrSpeed_rps = mtrSpeed_rpm/60;
 mtrSpeed_dps = mtrSpeed_rps *360;
 mtrSpeed_cps = mtrSpeed_rps*1023;
@@ -48,6 +48,7 @@ mtrSpeed_cps = mtrSpeed_rps*1023;
 startOffset_deg = 10;
 
 WRAP_THRESHOLD = 20;
+MAX_ACCEL_CNTS = 5;
 
 numSectors = 15;%ceil(360/WRAP_THRESHOLD);
 sizeSector = ceil(1023/numSectors);
@@ -96,9 +97,10 @@ for ii = 1:length(t)
   realMrPos_deg(ii) = realMrPos;
   realMtrPos_cnts(ii) = mtrPosCnts;
   
-%   if (t(ii) >= 0.103)
-%      disp('time hit') 
-%   end
+  if (t(ii) >= 0.68)
+     this = 1;
+%      disp('time hit') ;
+  end
   
   
   if (mod(ii,dt_cntrl/dt_sim) == 0)
@@ -166,13 +168,26 @@ for ii = 1:length(t)
               
        TRACKING_crit = (trackingAck) > 2
        
+       if ((predictMode_crit == 0) && (TRACKING_crit == 0))
+%            diffCounts = MAX_ACCEL_CNTS*sign(diffCounts);
+%            TRACKING = 0;
+%            AQRTRACK = 1;
+%            predictMode = 0;
+           
+       end
+%        
        
        if( predictMode_crit )
           predictMode = 1;
-          trackingAck = 0;
-          trackingAckPrev = 0; 
+
           TRACKING = 0;
           AQRTRACK = 1;
+           
+          if (predictModePrev  == 0)
+             TRACKING_crit = 0;
+                trackingAck = 0;
+                trackingAckPrev = 0; 
+          end
        end
        
        if (TRACKING_crit)
@@ -207,6 +222,17 @@ for ii = 1:length(t)
             end
                 
         end
+        
+        if (AQRTRACK)
+            if ((abs(potMtrCnts - trackingAckPrev) < WRAP_THRESHOLD ) && (sampledMtrPos ~= 0) && (sampledMtrPos ~= 1023))
+                trackingAck = trackingAck +1;
+                 
+            else
+               trackingAck = 0;
+             %  lostTrackSample = sampledMtrPos;
+            end
+           trackingAckPrev = sampledMtrPos;
+        end
        
         
              
@@ -217,15 +243,7 @@ for ii = 1:length(t)
        end
        
        
-       if (AQRTRACK)
-            if (abs(sampledMtrPos - trackingAckPrev) < WRAP_THRESHOLD )
-                trackingAck = trackingAck +1;
-           else
-               trackingAck = 0;
-               lostTrackSample = sampledMtrPos;
-            end
-            trackingAckPrev = sampledMtrPos;
-       end
+     
            
            
        
@@ -285,15 +303,16 @@ for ii = 1:length(t)
 
       
     %    if ( (meas_, spd(countIdx) < 0)  ||   (meas_spd(countIdx) > 4000))
-   if ( (diffCounts) < 0 )
+   if ( abs(curSector - prevSector) >= 2 )
         disp('break')
+        curSector
    end
 
    if (   abs(realMrPos - mtrPosCntsUnwrapped*360/1023) > 100)
          disp('break')
     end
       
-
+diffCounts
     meas_predSect(countIdx)= predSector;
     meas_dir(countIdx)  = mtrDir;
     meas_sct(countIdx) = curSector;
@@ -364,9 +383,11 @@ hold all
 plot(meas_time,meas_mtrPosCntsUnwrapped*360/1023)
 plot(meas_time,meas_mtrPos,'x')
 % plot(meas_time,meas_pred*3000,'x')
-legend({'unwrap cnts';'real'})
+
 plot(meas_time,meas_wrapCnt*100)
 plot(meas_time,meas_sct*100)
+
+legend({'unwrap cnts';'real'; 'unwrap cnts'; 'sector'})
 
 figure(3),clf
 plot(meas_time,diff_cnts)
